@@ -42,8 +42,8 @@ take = 20
 normalize = False
 denoise = False
 lowpass = 0
-
-ffmpegwav = "ffmpeg -i {} -t %s -c:a pcm_s16le -map 0:a {}"
+# -t %s 
+ffmpegwav = "ffmpeg -i {}  -c:a pcm_s16le -map 0:a {}"
 ffmpegnormalize = "ffmpeg -y -nostdin -i {} -filter_complex \
 '[0:0]loudnorm=i=-23.0:lra=7.0:tp=-2.0:offset=4.45:linear=true:print_format=json[norm0]' \
 -map_metadata 0 -map_metadata:s:a:0 0:s:a:0 -map_chapters 0 -c:v copy -map '[norm0]' \
@@ -59,10 +59,12 @@ def in_out(command,infile,outfile):
     if 0 != ret:
       sys.exit(ret)
 
-def normalize_denoise(infile,outname):
+def normalize_denoise(infile,outname  , take= 0):
+
+
   with tempfile.TemporaryDirectory() as tempdir:
     outfile = o(pathlib.Path(tempdir)/outname)
-    in_out(ffmpegwav%take,infile,outfile)
+    in_out(ffmpegwav,infile,outfile)
     if normalize:
       infile, outfile = outfile,o(outfile)
       in_out(ffmpegnormalize,infile,outfile)
@@ -94,7 +96,7 @@ def fig1(title=None):
 def show1(fs, s, color=None, title=None, v=None):
   if not color: fig1(title)
   if ax and v: ax.axvline(x=v,color='green')
-  plt.plot(np.arange(len(s))/fs, s, color or 'black')
+  plt.plot(np.arange(len(s))/fs, s, color or 'black' ,alpha=.5)
   if not color: plt.show()
 
 def show2(fs,s1,s2,title=None):
@@ -105,16 +107,48 @@ def show2(fs,s1,s2,title=None):
 
 def read_normalized(in1,in2):
   global normalize
-  r1,s1 = normalize_denoise(in1,'out1')
-  r2,s2 = normalize_denoise(in2,'out2')
+  r1,s1 = normalize_denoise(in1,'out1' , 2 )
+  r2,s2 = normalize_denoise(in2,'out2' , 32 )
   if r1 != r2:
     old,normalize = normalize,True
-    r1,s1 = normalize_denoise(in1,'out1')
-    r2,s2 = normalize_denoise(in2,'out2')
+    r1,s1 = normalize_denoise(in1,'out1' , 2)
+    r2,s2 = normalize_denoise(in2,'out2' , 32)
     normalize = old
   assert r1 == r2, "not same sample rate"
   fs = r1
   return fs,s1,s2
+
+def corrabs(s1,s2):
+  ls1 = len(s1)
+  ls2 = len(s2)
+  padsize = ls1+ls2+1
+
+
+  padsize = 2**(int(np.log(padsize)/np.log(2))+1)
+  s1pad = np.zeros(padsize)
+  s1pad[:ls1] = s1
+  s2pad = np.zeros(padsize)
+  s2pad[:ls2] = s2
+
+  corr = fft.ifft(
+    fft.fft(s1pad)*np.conj(fft.fft(s2pad)
+    ))
+  
+  print(
+     "+" *100,
+    "\nls1 :", ls1 ,
+    "\nls2 :", ls2 ,
+    "\nls1 + ls2 + 1 :", ls1 + ls2 + 1,
+    "\npadsize :", padsize ,
+    "\ncorr.shape()  :", corr.shape()
+  )
+
+  ca = np.absolute(corr)
+  xmax = np.argmax(ca)
+  return ls1,ls2,padsize,xmax,ca
+
+
+
 
 def corrabs(s1,s2):
   ls1 = len(s1)
@@ -126,9 +160,9 @@ def corrabs(s1,s2):
   s2pad = np.zeros(padsize)
   s2pad[:ls2] = s2
 
-
-
-  corr = fft.ifft(fft.fft(s1pad)*np.conj(fft.fft(s2pad)))
+  corr = fft.ifft(
+    fft.fft(s1pad)*np.conj(fft.fft(s2pad)
+    ))
   ca = np.absolute(corr)
   xmax = np.argmax(ca)
   return ls1,ls2,padsize,xmax,ca
@@ -185,11 +219,11 @@ def cli_parser(**ka):
       the low frequencies matter more. 0 == off. (default: 0)")
   return parser
 
-def file_offset(**ka):
+
+def params_file_offset(**ka):
   """CLI interface to sync two media files using their audio streams.
   ffmpeg needs to be available.
   """
-
   parser = cli_parser(**ka)
   args = parser.parse_args().__dict__
   ka.update(args)
@@ -197,10 +231,19 @@ def file_offset(**ka):
   global take,normalize,denoise,lowpass
   in1,in2,take,show = ka['in1'],ka['in2'],ka['take'],ka['show']
   normalize,denoise,lowpass = ka['normalize'],ka['denoise'],ka['lowpass']
+  file_offset(in1,in2,show)
+
+
+def file_offset_external(in1,in2 ,show = True,take_ = 20 , normalize_=False,denoise_= False,lowpass_ = 0 ):
+  """File_offset with options out of argparse
+  """
+  global take,normalize,denoise,lowpass
+  take, normalize,denoise,lowpass = take_, normalize_,denoise_,lowpass_  
+  file_offset(in1,in2,show)
+
+def file_offset(in1,in2,show):
   fs,s1,s2 = read_normalized(in1,in2)
 
-  print ( "*"*30)
-  print (fs)
   ls1,ls2,padsize,xmax,ca = corrabs(s1,s2)
   if show: show1(fs,ca,title='Correlation',v=xmax/fs)
   sync_text = """
@@ -208,7 +251,7 @@ def file_offset(**ka):
 %s needs 'ffmpeg -ss %s' cut to get in sync
 ==============================================================================
 """
-  if xmax > padsize // 2:
+  if   xmax > ls1:
     if show: show2(fs,s1,s2[padsize-xmax:],title='1st=blue;2nd=red=cut(%s;%s)'%(in1,in2))
     file,offset = in2,(padsize-xmax)/fs
   else:
@@ -216,10 +259,9 @@ def file_offset(**ka):
     file,offset = in1,xmax/fs
   print(sync_text%(file,offset))
 
-
   return file,offset
 
-main = file_offset
+main = params_file_offset
 if __name__ == '__main__':
     main()
 
