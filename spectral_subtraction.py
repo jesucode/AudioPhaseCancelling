@@ -7,7 +7,7 @@ import soundfile as sf
 import librosa
 
 base_path = os.getcwd()
-output_path = os.path.join(base_path, "subtracted.wav")
+output_path = os.path.join(base_path, "subtracted2.wav")
 
 
 def resample(input_signal, old_sample_rate, new_sample_rate):
@@ -104,4 +104,4 @@ def run(noise_profile, noisy_input):
 	sf.write(output_path, output_x, FS, format="WAV")
 	return
 
-run("../bgmsy.wav" , "../original.wav")	
+run("../sources2/bgm.wav" , "../sources2/ori3.wav")	

@@ -101,18 +101,18 @@ def show1(fs, s, color=None, title=None, v=None):
 
 def show2(fs,s1,s2,title=None):
   fig1(title)
-  show1(fs,s1,'blue')
   show1(fs,s2,'red')
+  show1(fs,s1,'blue')
   plt.show()
 
 def read_normalized(in1,in2):
   global normalize
-  r1,s1 = normalize_denoise(in1,'out1' , 2 )
-  r2,s2 = normalize_denoise(in2,'out2' , 32 )
+  r1,s1 = normalize_denoise(in1,'out1' )
+  r2,s2 = normalize_denoise(in2,'out2' )
   if r1 != r2:
     old,normalize = normalize,True
-    r1,s1 = normalize_denoise(in1,'out1' , 2)
-    r2,s2 = normalize_denoise(in2,'out2' , 32)
+    r1,s1 = normalize_denoise(in1,'out1')
+    r2,s2 = normalize_denoise(in2,'out2')
     normalize = old
   assert r1 == r2, "not same sample rate"
   fs = r1
@@ -239,7 +239,8 @@ def file_offset_external(in1,in2 ,show = True,take_ = 20 , normalize_=False,deno
   """
   global take,normalize,denoise,lowpass
   take, normalize,denoise,lowpass = take_, normalize_,denoise_,lowpass_  
-  file_offset(in1,in2,show)
+  return file_offset(in1,in2,show)
+
 
 def file_offset(in1,in2,show):
   fs,s1,s2 = read_normalized(in1,in2)
